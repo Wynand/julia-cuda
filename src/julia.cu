@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <complex.h>
+#include <cuComplex.h>
 #include "utils.h"
 #include "julia.h"
 extern "C" {
@@ -12,9 +13,6 @@ extern "C" {
 }
 // Go through each pixel in the output image and tweak its colour value
 // (such that when we're done, the colour values in the data array have a uniform distribution)
-
-float * shared_cache;
-int cache_set = 0;
 
 // Takes an integer colour value and splits it into its RGB component parts.
 // val (a 32-bit unsigned integer type) is expected to contain a 24-bit unsigned integer.
@@ -30,7 +28,7 @@ void toRGB(unsigned int val,
 }
 
 // Returns the sum of the elements in the given array.
-unsigned int sum_array(unsigned int *array, int len)
+/*unsigned int sum_array(unsigned int *array, int len)
 {
     unsigned int total = 0;
     for (int i = 0; i < len; i++)
@@ -39,15 +37,15 @@ unsigned int sum_array(unsigned int *array, int len)
     }
 
     return total;
-}
+}*/
 
-__global__ void normalize_col(float * data, float * cache)
+__global__ void normalize_col(unsigned int * data, float * cache)
 {
-    int global_id = blockIdx.x * blockDim.x + threadIdx.x;
+    unsigned int global_id = blockIdx.x * blockDim.x + threadIdx.x;
     unsigned int val;
     float hue;
     // expand the value's range from [0, 1] to [0, MAX_COLOUR]
-    if(global_id < WIDTH * HEIGHT){
+    if(global_id < WIDTH*HEIGHT){
         //data[global_id] = __float2uint_rd(cache[__float2uint_rd(data[global_id])] * MAX_COLOUR);
 
         val = data[global_id];
@@ -58,6 +56,75 @@ __global__ void normalize_col(float * data, float * cache)
     }
 }
 
+/*__device__ cuComplex cExp( cuComplex z ){
+    cuComplex res;
+    float s, c;
+    float e = expf(z.x);
+    sincosf(z.y, &s, &c);
+    res.x = c * e;
+    res.y = s * e;
+    return res;
+}
+
+__device__ cuComplex csin( cuComplex z ){
+
+    cuComplex i = make_cuComplex(0.0,1.0);
+    cuComplex ni = make_cuComplex(0.0,-1.0);
+
+    return cuCdivf(
+
+        cuCsubf( cExp( cuCmulf(i,z) ) , cExp( cuCmulf(ni,z) )) 
+        , ( cuCmulf(i,make_cuComplex(2,0)) ) 
+    
+    );
+}
+
+/*__device__ unsigned int julia_iters(cuComplex z)
+{
+    unsigned int iter = 0;
+    cuComplex c = make_cuComplex( CR , CI );
+
+    while (fabsf(cuCimagf(z)) < LIMIT && iter < MAX_ITER - 1)
+    {
+        z = cuCmulf(c , csin(z));
+        iter++; 
+    }
+
+    //this value will be used to colour a pixel on the screen
+    return iter;
+}
+
+__global__ void drawFrame(unsigned int * data, unsigned int * hist, int frame){
+
+    int pixel = blockIdx.x * blockDim.x + threadIdx.x;
+
+    // Build the output image one pixel at a time.
+    if(pixel < WIDTH * HEIGHT){
+        cuComplex z;
+        float series_row;
+        float series_col;
+        unsigned int iters;
+    
+        int row = pixel/WIDTH;
+        int col = pixel%WIDTH;
+
+        series_row = row - HEIGHT / 2;
+        series_col = col - WIDTH / 2;
+
+        z = cuCaddf(
+            make_cuComplex((series_col / RES_FACTOR ), 0) , 
+            cuCmulf(
+                cuCdivf(make_cuComplex(0,1) , make_cuComplex(RES_FACTOR,0)) 
+                , make_cuComplex(series_row,0)));
+        z.x *= SCALE;
+        z.y *= SCALE;
+
+        iters = julia_iters(z);
+        data[pixel] = iters;
+        atomicAdd(&hist[iters],1);
+    }
+}*/
+
 // Perform "histogram colour equalization" on the data array, using the
 // information in the histogram array.
 // This just ensures that the colours get nicely distributed to different
@@ -66,35 +133,35 @@ __global__ void normalize_col(float * data, float * cache)
 void hist_eq(unsigned int *data, unsigned int *hist)
 {
     float hue = 0.0;
-    if(!cache_set){
-        float * cache = (float *)malloc(sizeof(float)*MAX_ITER);
-        cache_set = 1;
-        unsigned int total = sum_array(hist, MAX_ITER);
-        for (unsigned int i = 0; i < MAX_ITER; i++)
-        {
-            cache[i] = hue;
-            hue += (float) hist[i] / total;
-        }
-        cudaMalloc(&shared_cache, MAX_ITER);
-        cudaMemcpy(shared_cache, cache, MAX_ITER, cudaMemcpyHostToDevice);
-        cudaDeviceSynchronize();
-        free(cache);
+    float * cache = (float *)malloc(sizeof(float)*MAX_ITER);
+    float * shared_cache;
+    unsigned int total = sum_array(hist, MAX_ITER);
+    for (unsigned int i = 0; i < MAX_ITER; i++)
+    {
+        cache[i] = hue;
+        hue += (float) hist[i] / total;
     }
+    cudaMalloc(&shared_cache, MAX_ITER * sizeof(float));
+    cudaMemcpy(shared_cache, cache, MAX_ITER, cudaMemcpyHostToDevice);
+    cudaDeviceSynchronize();
+    free(cache);
 
     // Go through each pixel in the output image and tweak its colour value
     // (such that when we're done, the colour values in the data array have a uniform distribution)
-    float * dev_data;
+    unsigned int * dev_data;
     int block_size = get_max_block_threads();
     int n = HEIGHT * WIDTH;
+    cudaError_t status;
     int blocks = n / block_size + (n % block_size > 0 ? 1 : 0);
-    cudaMalloc(&dev_data, HEIGHT*WIDTH);
-    cudaMemcpy(dev_data,data,HEIGHT*WIDTH, cudaMemcpyHostToDevice);
+    printf("block size: %d\tn: %d\tblocks: %d\tblock size * blocks: %d\n",block_size,n,blocks,block_size*blocks);
+    cudaMalloc(&dev_data, WIDTH*HEIGHT*sizeof(int));
+
+    cudaMemcpy(dev_data,data, WIDTH*HEIGHT*sizeof(int), cudaMemcpyHostToDevice);
     normalize_col<<<blocks,block_size>>>(dev_data,shared_cache);
-    cudaMemcpy(data,dev_data,HEIGHT*WIDTH, cudaMemcpyDeviceToHost);
+    cudaMemcpy(data,dev_data, WIDTH*HEIGHT*sizeof(int), cudaMemcpyDeviceToHost);
+
     cudaFree(dev_data);
     cudaFree(shared_cache);
-    cache_set = false;
-    cudaDeviceSynchronize();
 }
 
 // Writes the given data to a bitmap (.bmp) file with the given name.
@@ -134,6 +201,28 @@ int main(int argc, char *argv[])
         for(int i = 0; i < MAX_ITER; i++){
             hist[i] = 0;
         }
+
+        unsigned int * dev_data;
+        unsigned int * dev_hist;
+
+
+        int block_size = get_max_block_threads();
+        int n = HEIGHT * WIDTH;
+        int blocks = n / block_size + (n % block_size > 0 ? 1 : 0);
+
+        /*cudaMalloc(&dev_hist, MAX_ITER);
+        cudaMemcpy(dev_hist,hist,MAX_ITER, cudaMemcpyHostToDevice);
+
+        cudaMalloc(&dev_data, HEIGHT*WIDTH);
+        cudaMemcpy(dev_data,data,HEIGHT*WIDTH, cudaMemcpyHostToDevice);
+        drawFrame<<<blocks,block_size>>>(dev_data,dev_hist,frame);
+        cudaMemcpy(data,dev_data,HEIGHT*WIDTH, cudaMemcpyDeviceToHost);
+        cudaFree(dev_data);
+
+        cudaMemcpy(hist,dev_hist,MAX_ITER, cudaMemcpyDeviceToHost);
+        cudaFree(dev_hist);
+
+        cudaDeviceSynchronize();*/
 
         drawFrame(data,hist,frame);
 

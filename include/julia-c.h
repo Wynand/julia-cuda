@@ -11,7 +11,7 @@
 // Note that values closer to 0.0 may significantly increase the computation time.
 // You can set either of the terms to anything in the range -1.0 to 1.0. Just make sure to
 // keep the trailing 'I'.
-#define C (1.0 + 0.5I)
+#define C (1.0 + 0.5*I)
 // Name of the file to same the output image in
 #define FNAME "out.bmp"
 
@@ -27,5 +27,8 @@
 /* Prototype Declarations */
 
 void drawFrame(unsigned int * data, unsigned int * hist, int frame);
+//void normalize_col(unsigned int * data, float * cache);
+void write_bmp(unsigned int *data, char *fname);
+unsigned int sum_array(unsigned int *array, int len);
 
 #endif

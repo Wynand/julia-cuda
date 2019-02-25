@@ -6,7 +6,7 @@
 // Dimensions of the output image
 #define WIDTH 600
 #define HEIGHT 600
-#define FRAME_COUNT 1000
+#define FRAME_COUNT 10
 #define STEP_FACTOR 0.99
 // Controls how close we "zoom in" on the fractal pattern (lower = closer)
 #define SCALE 2.0
@@ -14,7 +14,9 @@
 // Note that values closer to 0.0 may significantly increase the computation time.
 // You can set either of the terms to anything in the range -1.0 to 1.0. Just make sure to
 // keep the trailing 'I'.
-#define C (1.0 + 0.5I)
+//#define C (1.0 + 0.5I)
+#define CR 1.0
+#define CI 0.5
 // Name of the file to same the output image in
 #define FNAME "out.bmp"
 
@@ -29,8 +31,8 @@
 
 /* Prototype Declarations */
 
-void hist_eq(unsigned int *data, unsigned int *hist);
+/*void hist_eq(unsigned int *data, unsigned int *hist);
 void write_bmp(unsigned int *data, char *fname);
-__global__ void normalize_col(float * data, float * cache);
+__global__ void normalize_col(float * data, float * cache);*/
 
 #endif

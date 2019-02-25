@@ -1,5 +1,5 @@
 julia: object/julia.o object/utils.o object/qdbmp.o object/julia-c.o
-	nvcc -L. -Iinclude  object/julia-c.o  object/qdbmp.o  object/utils.o  object/julia.o -o julia
+	nvcc -L. -Iinclude  object/qdbmp.o  object/utils.o  object/julia.o object/julia-c.o -o julia
 
 object/julia.o: 
 	nvcc -c -L. -Iinclude src/julia.cu -o object/julia.o -lm
