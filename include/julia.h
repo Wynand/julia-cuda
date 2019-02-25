@@ -4,9 +4,9 @@
 /* Control Constants - feel free to play around with these settings to generate different images if you like. */
 
 // Dimensions of the output image
-#define WIDTH 600
-#define HEIGHT 600
-#define FRAME_COUNT 10
+#define WIDTH 1920
+#define HEIGHT 1080
+#define FRAME_COUNT 1000
 #define STEP_FACTOR 0.99
 // Controls how close we "zoom in" on the fractal pattern (lower = closer)
 #define SCALE 2.0
@@ -16,7 +16,7 @@
 // keep the trailing 'I'.
 //#define C (1.0 + 0.5I)
 #define CR 1.0
-#define CI 0.5
+#define CI 0.05
 // Name of the file to same the output image in
 #define FNAME "out.bmp"
 
